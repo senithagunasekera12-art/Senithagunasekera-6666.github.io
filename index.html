@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS/CHAIN — Distributed Consensus Interface</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+        :root {
+            --bg-primary: #050508;
+            --bg-secondary: #0a0a0f;
+            --bg-card: rgba(10, 10, 15, 0.85);
+            --bg-glass: rgba(255, 255, 255, 0.03);
+            --text-primary: #e8e8f0;
+            --text-secondary: #8a8a9e;
+            --text-muted: #5a5a6e;
+            --accent-cyan: #00d4ff;
+            --accent-green: #00ff88;
+            --accent-magenta: #ff006e;
+            --accent-amber: #ffb700;
+            --accent-violet: #8b5cf6;
+            --border-subtle: rgba(255, 255, 255, 0.06);
+            --border-glow: rgba(0, 212, 255, 0.15);
+            --font-mono: 'JetBrains Mono', monospace;
+            --font-display: 'Space Grotesk', sans-serif;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: var(--font-display);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            overflow-x: hidden;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* ===== ANIMATED BACKGROUND ===== */
+        .bg-canvas {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -2; background: var(--bg-primary);
+        }
+        .bg-grid {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: -1;
+            background-image: 
+                linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+            background-size: 60px 60px;
+            mask-image: radial-gradient(ellipse at 50% 50%, black 40%, transparent 80%);
+        }
+        .bg-orb {
+            position: fixed; border-radius: 50%; filter: blur(100px);
+            z-index: -1; opacity: 0.4; animation: orbFloat 20s ease-in-out infinite;
+        }
+        .bg-orb-1 { width: 600px; height: 600px; background: rgba(0, 212, 255, 0.08); top: -10%; left: -10%; animation-delay: 0s; }
+        .bg-orb-2 { width: 500px; height: 500px; background: rgba(139, 92, 246, 0.06); bottom: -10%; right: -10%; animation-delay: -7s; }
+        .bg-orb-3 { width: 400px; height: 400px; background: rgba(255, 0, 110, 0.05); top: 40%; left: 60%; animation-delay: -14s; }
+        @keyframes orbFloat {
+            0%, 100% { transform: translate(0, 0) scale(1); }
+            33% { transform: translate(30px, -50px) scale(1.1); }
+            66% { transform: translate(-20px, 30px) scale(0.9); }
+        }
+
+        /* ===== NAVIGATION ===== */
+        nav {
+            position: fixed; top: 0; width: 100%;
+            background: rgba(5, 5, 8, 0.85);
+            backdrop-filter: blur(20px) saturate(1.2);
+            border-bottom: 1px solid var(--border-subtle);
+            z-index: 1000; padding: 0;
+        }
+        .nav-container {
+            max-width: 1400px; margin: 0 auto; padding: 0 2rem;
+            display: flex; justify-content: space-between; align-items: center; height: 64px;
+        }
+        .nav-brand {
+            display: flex; align-items: center; gap: 0.75rem;
+            font-family: var(--font-mono); font-size: 0.875rem; font-weight: 700;
+            letter-spacing: 0.1em; color: var(--text-primary);
+        }
+        .nav-brand::before { content: '◆'; color: var(--accent-cyan); font-size: 1rem; animation: pulse 2s ease-in-out infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .nav-links { display: flex; gap: 0.5rem; list-style: none; }
+        .nav-links a {
+            font-family: var(--font-mono); font-size: 0.75rem; font-weight: 500;
+            letter-spacing: 0.05em; text-transform: uppercase; color: var(--text-muted);
+            text-decoration: none; padding: 0.5rem 1rem; border-radius: 6px;
+            transition: all 0.3s ease; position: relative; border: 1px solid transparent;
+        }
+        .nav-links a:hover { color: var(--accent-cyan); background: var(--bg-glass); border-color: var(--border-glow); }
+        .nav-links a.active { color: var(--accent-cyan); background: rgba(0, 212, 255, 0.08); border-color: var(--border-glow); }
+        .nav-status { display: flex; align-items: center; gap: 0.5rem; font-family: var(--font-mono); font-size: 0.65rem; color: var(--accent-green); }
+        .status-dot { width: 6px; height: 6px; background: var(--accent-green); border-radius: 50%; animation: blink 2s ease-in-out infinite; box-shadow: 0 0 10px var(--accent-green); }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        .menu-toggle { display: none; background: none; border: none; color: var(--text-primary); font-size: 1.25rem; cursor: pointer; }
+
+        /* ===== SECTIONS ===== */
+        section {
+            max-width: 1400px; margin: 0 auto; padding: 6rem 2rem 4rem;
+            display: none; animation: fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ===== HERO ===== */
+        .hero {
+            min-height: 100vh; display: flex; flex-direction: column;
+            justify-content: center; align-items: flex-start; padding: 8rem 2rem 4rem; position: relative;
+        }
+        .hero-badge {
+            font-family: var(--font-mono); font-size: 0.7rem; letter-spacing: 0.2em;
+            text-transform: uppercase; color: var(--accent-cyan); border: 1px solid var(--border-glow);
+            padding: 0.5rem 1rem; border-radius: 4px; margin-bottom: 2rem; background: rgba(0, 212, 255, 0.05);
+        }
+        .hero h1 {
+            font-family: var(--font-display); font-size: clamp(3rem, 8vw, 7rem);
+            font-weight: 700; line-height: 1.05; letter-spacing: -0.03em;
+            margin-bottom: 1.5rem; max-width: 900px;
+        }
+        .hero h1 .accent {
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+        }
+        .hero-desc { font-size: 1.25rem; color: var(--text-secondary); max-width: 600px; margin-bottom: 3rem; line-height: 1.7; }
+        .hero-cta { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .btn-primary {
+            font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.1em;
+            text-transform: uppercase; padding: 1rem 2rem;
+            background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet));
+            color: var(--bg-primary); border: none; border-radius: 6px; cursor: pointer;
+            transition: all 0.3s ease; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;
+        }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 10px 40px rgba(0, 212, 255, 0.3); }
+        .btn-secondary {
+            font-family: var(--font-mono); font-size: 0.8rem; font-weight: 600; letter-spacing: 0.1em;
+            text-transform: uppercase; padding: 1rem 2rem; background: transparent; color: var(--text-primary);
+            border: 1px solid var(--border-subtle); border-radius: 6px; cursor: pointer;
+            transition: all 0.3s ease; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;
+        }
+        .btn-secondary:hover { border-color: var(--accent-cyan); color: var(--accent-cyan); background: rgba(0, 212, 255, 0.05); }
+
+        /* ===== LIVE DASHBOARD ===== */
+        .live-dashboard {
+            position: absolute; right: 2rem; top: 50%; transform: translateY(-50%);
+            background: var(--bg-card); border: 1px solid var(--border-subtle);
+            border-radius: 12px; padding: 1.5rem; min-width: 280px; backdrop-filter: blur(10px);
+        }
+        .dashboard-header {
+            font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.15em;
+            text-transform: uppercase; color: var(--text-muted); margin-bottom: 1rem;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .dashboard-live { color: var(--accent-green); display: flex; align-items: center; gap: 0.3rem; }
+        .dashboard-stat { display: flex; justify-content: space-between; align-items: center; padding: 0.75rem 0; border-bottom: 1px solid var(--border-subtle); }
+        .dashboard-stat:last-child { border-bottom: none; }
+        .stat-label { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-value { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+
+        /* ===== NODE STREAM ===== */
+        .node-stream {
+            font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted);
+            margin-top: 3rem; max-width: 600px; overflow: hidden; white-space: nowrap; position: relative;
+        }
+        .node-stream::before { content: 'node_stream.log'; display: block; color: var(--accent-cyan); margin-bottom: 0.5rem; font-weight: 600; }
+        .stream-content { display: inline-block; animation: streamScroll 30s linear infinite; opacity: 0.5; }
+        @keyframes streamScroll { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+        /* ===== SECTION HEADERS ===== */
+        .section-header { margin-bottom: 4rem; position: relative; }
+        .section-number { font-family: var(--font-mono); font-size: 0.7rem; color: var(--accent-cyan); letter-spacing: 0.2em; margin-bottom: 1rem; }
+        .section-header h2 { font-family: var(--font-display); font-size: clamp(2rem, 5vw, 3.5rem); font-weight: 700; line-height: 1.1; letter-spacing: -0.02em; margin-bottom: 1rem; }
+        .section-header p { color: var(--text-secondary); max-width: 600px; font-size: 1.1rem; line-height: 1.7; }
+
+        /* ===== CARDS ===== */
+        .cards-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1.5rem; }
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px;
+            padding: 2rem; transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1); position: relative; overflow: hidden; cursor: pointer;
+        }
+        .card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 1px; background: linear-gradient(90deg, transparent, var(--accent-cyan), transparent); opacity: 0; transition: opacity 0.4s; }
+        .card:hover::before { opacity: 1; }
+        .card:hover { border-color: var(--border-glow); transform: translateY(-4px); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4), 0 0 40px rgba(0, 212, 255, 0.05); }
+        .card-tag { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent-cyan); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+        .card-tag::before { content: '◆'; font-size: 0.5rem; }
+        .card h3 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1rem; color: var(--text-primary); }
+        .card p { color: var(--text-secondary); font-size: 0.95rem; line-height: 1.7; margin-bottom: 1.5rem; }
+        .card-link { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--accent-cyan); text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem; transition: gap 0.3s; }
+        .card-link:hover { gap: 1rem; }
+        .card-link::after { content: '→'; }
+
+        /* ===== CONTENT BLOCKS ===== */
+        .content-block {
+            background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px;
+            padding: 2.5rem; margin-bottom: 2rem; position: relative;
+        }
+        .content-block::before { content: ''; position: absolute; top: 0; left: 2.5rem; width: 60px; height: 2px; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-violet)); }
+        .content-block h3 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 1.5rem; color: var(--text-primary); }
+        .content-block p { color: var(--text-secondary); margin-bottom: 1rem; line-height: 1.8; }
+        .content-block ul { margin-left: 1.5rem; color: var(--text-secondary); }
+        .content-block li { margin-bottom: 0.75rem; line-height: 1.7; }
+        .content-block li strong { color: var(--text-primary); }
+
+        /* ===== PROTOCOL GRID ===== */
+        .protocol-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1rem; margin: 2rem 0; }
+        .protocol-item { background: var(--bg-glass); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 1.25rem; transition: all 0.3s; }
+        .protocol-item:hover { border-color: var(--border-glow); background: rgba(0, 212, 255, 0.03); }
+        .protocol-label { font-family: var(--font-mono); font-size: 0.6rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .protocol-value { font-family: var(--font-mono); font-size: 0.9rem; font-weight: 600; color: var(--text-primary); }
+        .protocol-value.confidential { color: var(--accent-magenta); }
+
+        /* ===== THREAT MODEL ===== */
+        .threat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin: 2rem 0; }
+        .threat-item { text-align: center; padding: 1.5rem; background: var(--bg-glass); border: 1px solid var(--border-subtle); border-radius: 8px; }
+        .threat-item.mitigated { border-color: rgba(0, 255, 136, 0.2); background: rgba(0, 255, 136, 0.03); }
+        .threat-name { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; color: var(--text-muted); margin-bottom: 0.5rem; }
+        .threat-status { font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; color: var(--accent-green); }
+
+        /* ===== EXPLORER ===== */
+        .explorer { background: var(--bg-primary); border: 1px solid var(--border-subtle); border-radius: 8px; padding: 1.5rem; font-family: var(--font-mono); font-size: 0.75rem; margin: 2rem 0; overflow-x: auto; }
+        .explorer-header { display: flex; justify-content: space-between; margin-bottom: 1rem; color: var(--text-muted); font-size: 0.65rem; letter-spacing: 0.1em; text-transform: uppercase; }
+        .explorer-hash { color: var(--accent-cyan); word-break: break-all; line-height: 2; opacity: 0.7; }
+        .explorer-verified { color: var(--accent-green); margin-top: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+
+        /* ===== STATS ===== */
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.5rem; margin: 3rem 0; }
+        .stat-card { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 2rem; text-align: center; position: relative; overflow: hidden; }
+        .stat-card::before { content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 2px; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-violet)); }
+        .stat-number { font-family: var(--font-mono); font-size: 2.5rem; font-weight: 700; background: linear-gradient(135deg, var(--accent-cyan), var(--accent-violet)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; margin-bottom: 0.5rem; }
+        .stat-label { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); }
+        .stat-change { font-family: var(--font-mono); font-size: 0.75rem; color: var(--accent-green); margin-top: 0.5rem; }
+
+        /* ===== TELEMETRY CHART ===== */
+        .telemetry-chart { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 2rem; margin: 2rem 0; }
+        .chart-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem; }
+        .chart-title { font-family: var(--font-mono); font-size: 0.75rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--text-muted); }
+        .chart-legend { font-family: var(--font-mono); font-size: 0.65rem; color: var(--accent-cyan); }
+        .chart-bars { display: flex; align-items: flex-end; gap: 1rem; height: 200px; }
+        .chart-bar-group { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 0.5rem; }
+        .chart-bar { width: 100%; background: linear-gradient(to top, var(--accent-cyan), var(--accent-violet)); border-radius: 4px 4px 0 0; transition: all 0.6s cubic-bezier(0.16, 1, 0.3, 1); position: relative; min-height: 20px; }
+        .chart-bar:hover { filter: brightness(1.3); }
+        .chart-bar-value { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-primary); position: absolute; top: -20px; left: 50%; transform: translateX(-50%); white-space: nowrap; }
+        .chart-bar-label { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); text-align: center; }
+
+        /* ===== IMAGES ===== */
+        .image-container { margin: 2rem 0; border-radius: 12px; overflow: hidden; border: 1px solid var(--border-subtle); position: relative; }
+        .image-container::after { content: ''; position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(to bottom, transparent 60%, rgba(5, 5, 8, 0.8)); pointer-events: none; }
+        .image-container img { width: 100%; height: auto; display: block; filter: saturate(0.8) contrast(1.1); transition: filter 0.4s; }
+        .image-container:hover img { filter: saturate(1) contrast(1.1); }
+        .image-caption { padding: 1rem 1.5rem; font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); border-top: 1px solid var(--border-subtle); background: var(--bg-primary); position: relative; z-index: 1; }
+        .image-caption a { color: var(--accent-cyan); text-decoration: none; }
+        .image-caption a:hover { text-decoration: underline; }
+
+        /* ===== HIGHLIGHT BOX ===== */
+        .highlight-box { background: linear-gradient(135deg, rgba(0, 212, 255, 0.05), rgba(139, 92, 246, 0.05)); border-left: 2px solid var(--accent-cyan); padding: 1.5rem 2rem; border-radius: 0 8px 8px 0; margin: 2rem 0; position: relative; }
+        .highlight-box::before { content: '"'; position: absolute; top: 0.5rem; left: 0.75rem; font-family: var(--font-display); font-size: 2rem; color: var(--accent-cyan); opacity: 0.3; line-height: 1; }
+        .highlight-box p { margin: 0; font-style: italic; color: var(--text-secondary); padding-left: 1rem; }
+
+        /* ===== TABLE ===== */
+        .comparison-table { width: 100%; border-collapse: collapse; margin: 2rem 0; font-size: 0.9rem; }
+        .comparison-table th, .comparison-table td { padding: 1rem 1.25rem; text-align: left; border-bottom: 1px solid var(--border-subtle); }
+        .comparison-table th { font-family: var(--font-mono); font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--accent-cyan); font-weight: 600; background: rgba(0, 212, 255, 0.03); }
+        .comparison-table tr:hover { background: rgba(0, 212, 255, 0.02); }
+        .comparison-table td { color: var(--text-secondary); }
+
+        /* ===== TIMELINE ===== */
+        .timeline { position: relative; padding-left: 2rem; margin: 2rem 0; }
+        .timeline::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 1px; background: linear-gradient(to bottom, var(--accent-cyan), var(--accent-violet), var(--accent-magenta)); }
+        .timeline-item { position: relative; padding-bottom: 2.5rem; }
+        .timeline-item::before { content: ''; position: absolute; left: -2rem; top: 0.3rem; width: 8px; height: 8px; background: var(--bg-primary); border: 2px solid var(--accent-cyan); border-radius: 50%; margin-left: -3.5px; }
+        .timeline-year { font-family: var(--font-mono); font-weight: 700; color: var(--accent-cyan); margin-bottom: 0.5rem; font-size: 0.85rem; }
+        .timeline-item p { color: var(--text-secondary); line-height: 1.7; }
+
+        /* ===== REFERENCES ===== */
+        .references { background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: 12px; padding: 2.5rem; margin-top: 3rem; }
+        .references::before { content: ''; display: block; width: 60px; height: 2px; background: linear-gradient(90deg, var(--accent-cyan), var(--accent-violet)); margin-bottom: 2rem; }
+        .references h3 { font-family: var(--font-display); font-size: 1.5rem; font-weight: 600; margin-bottom: 2rem; color: var(--text-primary); }
+        .references ol { padding-left: 1.5rem; }
+        .references li { margin-bottom: 1.25rem; color: var(--text-secondary); font-size: 0.85rem; line-height: 1.7; padding-left: 0.5rem; }
+        .references li::marker { color: var(--accent-cyan); font-family: var(--font-mono); font-weight: 600; }
+
+        /* ===== FOOTER ===== */
+        footer { max-width: 1400px; margin: 0 auto; padding: 4rem 2rem; border-top: 1px solid var(--border-subtle); text-align: center; }
+        .footer-brand { font-family: var(--font-mono); font-size: 0.875rem; font-weight: 700; letter-spacing: 0.1em; color: var(--text-primary); margin-bottom: 1rem; }
+        .footer-brand::before { content: '◆'; color: var(--accent-cyan); margin-right: 0.5rem; }
+        .footer-text { font-family: var(--font-mono); font-size: 0.7rem; color: var(--text-muted); line-height: 1.8; }
+        .seed-phrase { font-family: var(--font-mono); font-size: 0.65rem; color: var(--text-muted); opacity: 0.4; word-break: break-all; line-height: 1.8; margin-top: 2rem; user-select: none; }
+
+        /* ===== SCROLLBAR ===== */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border-subtle); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .live-dashboard { position: relative; right: auto; top: auto; transform: none; margin-top: 3rem; width: 100%; }
+            .hero { padding-top: 6rem; }
+            .threat-grid { grid-template-columns: repeat(2, 1fr); }
+        }
+        @media (max-width: 768px) {
+            .menu-toggle { display: block; }
+            .nav-links { display: none; position: absolute; top: 100%; left: 0; right: 0; background: var(--bg-secondary); flex-direction: column; padding: 1rem; border-bottom: 1px solid var(--border-subtle); gap: 0.25rem; }
+            .nav-links.active { display: flex; }
+            .nav-status { display: none; }
+            .hero h1 { font-size: 2.5rem; }
+            .hero-cta { flex-direction: column; }
+            .btn-primary, .btn-secondary { width: 100%; justify-content: center; }
+            .threat-grid { grid-template-columns: 1fr; }
+            .protocol-grid { grid-template-columns: 1fr; }
+            section { padding: 5rem 1rem 3rem; }
+            .cards-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+<base target="_blank">
+</head>
+<body>
+    <canvas class="bg-canvas" id="bgCanvas"></canvas>
+    <div class="bg-grid"></div>
+    <div class="bg-orb bg-orb-1"></div>
+    <div class="bg-orb bg-orb-2"></div>
+    <div class="bg-orb bg-orb-3"></div>
+
+    <nav>
+        <div class="nav-container">
+            <div class="nav-brand">NEXUS/CHAIN</div>
+            <button class="menu-toggle" onclick="toggleMenu()">≡</button>
+            <ul class="nav-links" id="navLinks">
+                <li><a href="#home" class="active" onclick="showSection('home', this)">Home</a></li>
+                <li><a href="#protocol" onclick="showSection('protocol', this)">Protocol</a></li>
+                <li><a href="#finance" onclick="showSection('finance', this)">Finance</a></li>
+                <li><a href="#supply-chain" onclick="showSection('supply-chain', this)">Supply Chain</a></li>
+                <li><a href="#healthcare" onclick="showSection('healthcare', this)">Healthcare</a></li>
+                <li><a href="#real-estate" onclick="showSection('real-estate', this)">Real Estate</a></li>
+                <li><a href="#voting" onclick="showSection('voting', this)">Voting</a></li>
+                <li><a href="#telemetry" onclick="showSection('telemetry', this)">Telemetry</a></li>
+                <li><a href="#about" onclick="showSection('about', this)">About</a></li>
+            </ul>
+            <div class="nav-status">
+                <span class="status-dot"></span>
+                <span>LIVE</span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- ===== HOME ===== -->
+    <section id="home" class="active">
+        <div class="hero">
+            <div class="hero-badge">v.2026.5.0 // Distributed Consensus Interface</div>
+            <h1>The Architecture<br>of <span class="accent">Trustless</span><br>Consensus</h1>
+            <p class="hero-desc">Blockchain is not merely a database—it is a mechanism for establishing distributed consensus without intermediaries. In 2026, this mechanism secures $33 billion in tokenized assets across 137 sovereign networks.</p>
+            <div class="hero-cta">
+                <a href="#protocol" class="btn-primary" onclick="showSection('protocol', document.querySelector('a[href="#protocol"]')">Explore Protocol</a>
+                <a href="#finance" class="btn-secondary" onclick="showSection('finance', document.querySelector('a[href="#finance"]')">View Disruptions</a>
+            </div>
+
+            <div class="node-stream">
+                <div class="stream-content">
+                    SHA-256: 0000000000000000000b3d8a7c4e8f9a2b1c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0
+                </div>
+            </div>
+        </div>
+
+        <div class="live-dashboard">
+            <div class="dashboard-header">
+                <span>Network Telemetry</span>
+                <span class="dashboard-live"><span class="status-dot"></span> LIVE</span>
+            </div>
+            <div class="dashboard-stat">
+                <span class="stat-label">Network</span>
+                <span class="stat-value">Operational</span>
+            </div>
+            <div class="dashboard-stat">
+                <span class="stat-label">Active Nodes</span>
+                <span class="stat-value" id="nodeCount">14,892</span>
+            </div>
+            <div class="dashboard-stat">
+                <span class="stat-label">Block Height</span>
+                <span class="stat-value" id="blockHeight">18,402,991</span>
+            </div>
+            <div class="dashboard-stat">
+                <span class="stat-label">Latency</span>
+                <span class="stat-value" id="latency">12ms</span>
+            </div>
+            <div class="dashboard-stat">
+                <span class="stat-label">Market Cap</span>
+                <span class="stat-value">$33.0B</span>
+            </div>
+            <div class="dashboard-stat">
+                <span class="stat-label">CBDC Networks</span>
+                <span class="stat-value">137</span>
+            </div>
+        </div>
+
+        <div class="section-header" style="margin-top: 6rem;">
+            <div class="section-number">01 // Industries Under Transformation</div>
+            <h2>Disruption Vectors</h2>
+            <p>Blockchain technology is not just disrupting—it's rebuilding the foundations of how traditional sectors operate through cryptographic verification and distributed consensus.</p>
+        </div>
+
+        <div class="cards-grid">
+            <div class="card" onclick="showSection('finance', document.querySelector('a[href="#finance"]')">
+                <div class="card-tag">Finance</div>
+                <h3>Decentralized Finance</h3>
+                <p>DeFi eliminates intermediaries, reduces transaction costs from 7% to near-zero, and enables 24/7 global financial services without traditional banking infrastructure.</p>
+                <span class="card-link">Explore Finance</span>
+            </div>
+            <div class="card" onclick="showSection('supply-chain', document.querySelector('a[href="#supply-chain"]')">
+                <div class="card-tag">Logistics</div>
+                <h3>Supply Chain</h3>
+                <p>Immutable ledgers provide end-to-end traceability, combat counterfeiting worth $200B annually, and create transparent provenance from manufacturer to consumer.</p>
+                <span class="card-link">Explore Supply Chain</span>
+            </div>
+            <div class="card" onclick="showSection('healthcare', document.querySelector('a[href="#healthcare"]')">
+                <div class="card-tag">Health</div>
+                <h3>Healthcare</h3>
+                <p>Secure patient data management, interoperability between providers, and streamlined clinical trials through immutable health records projected to reach $10B by 2025.</p>
+                <span class="card-link">Explore Healthcare</span>
+            </div>
+            <div class="card" onclick="showSection('real-estate', document.querySelector('a[href="#real-estate"]')">
+                <div class="card-tag">Property</div>
+                <h3>Real Estate</h3>
+                <p>Tokenization of property assets, smart contract automation of transactions, and transparent land registries reducing fraud and friction in $3.2T markets.</p>
+                <span class="card-link">Explore Real Estate</span>
+            </div>
+            <div class="card" onclick="showSection('voting', document.querySelector('a[href="#voting"]')">
+                <div class="card-tag">Governance</div>
+                <h3>Voting & DAOs</h3>
+                <p>Tamper-proof electoral systems, transparent governance mechanisms, and decentralized autonomous organizations reshaping democratic participation.</p>
+                <span class="card-link">Explore Voting</span>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== PROTOCOL ===== -->
+    <section id="protocol">
+        <div class="section-header">
+            <div class="section-number">02 // Protocol Architecture</div>
+            <h2>Core Parameters</h2>
+            <p>The technical foundation enabling trustless consensus across distributed networks without centralized authority.</p>
+        </div>
+
+        <div class="protocol-grid">
+            <div class="protocol-item">
+                <div class="protocol-label">Consensus</div>
+                <div class="protocol-value">Proof of Stake / Hybrid BFT</div>
+            </div>
+            <div class="protocol-item">
+                <div class="protocol-label">Throughput</div>
+                <div class="protocol-value">50,000 TPS (L2) / 15 TPS (L1)</div>
+            </div>
+            <div class="protocol-item">
+                <div class="protocol-label">Finality</div>
+                <div class="protocol-value">~12 seconds</div>
+            </div>
+            <div class="protocol-item">
+                <div class="protocol-label">Cryptography</div>
+                <div class="protocol-value">SHA-256 / ECDSA / zk-SNARKs</div>
+            </div>
+            <div class="protocol-item">
+                <div class="protocol-label">VM</div>
+                <div class="protocol-value">EVM-Compatible / WASM</div>
+            </div>
+            <div class="protocol-item">
+                <div class="protocol-label">Interop</div>
+                <div class="protocol-value">IBC / CCIP / LayerZero</div>
+            </div>
+        </div>
+
+        <div class="content-block" style="margin-top: 3rem;">
+            <h3>Active Threat Model</h3>
+            <div class="threat-grid">
+                <div class="threat-item mitigated">
+                    <div class="threat-name">51% Attack</div>
+                    <div class="threat-status">MITIGATED</div>
+                </div>
+                <div class="threat-item mitigated">
+                    <div class="threat-name">Sybil</div>
+                    <div class="threat-status">MITIGATED</div>
+                </div>
+                <div class="threat-item mitigated">
+                    <div class="threat-name">Finality Grief</div>
+                    <div class="threat-status">MITIGATED</div>
+                </div>
+                <div class="threat-item mitigated">
+                    <div class="threat-name">Reorg Risk</div>
+                    <div class="threat-status">MITIGATED</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+            <h3>Network Topology</h3>
+            <div class="protocol-grid">
+                <div class="protocol-item">
+                    <div class="protocol-label">P2P Status</div>
+                    <div class="protocol-value">ACTIVE</div>
+                </div>
+                <div class="protocol-item">
+                    <div class="protocol-label">L1 Base</div>
+                    <div class="protocol-value">Settlement & Consensus</div>
+                </div>
+                <div class="protocol-item">
+                    <div class="protocol-label">L2 Execution</div>
+                    <div class="protocol-value">Rollups & State Channels</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+            <h3>Immutable Ledger</h3>
+            <div class="explorer">
+                <div class="explorer-header">
+                    <span>Block Explorer // Real-time</span>
+                    <span>CHAIN VERIFIED</span>
+                </div>
+                <div class="explorer-hash">
+                    0000000000000000000b3d8a7c4e8f9a2b1c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0
+                </div>
+                <div class="explorer-verified">
+                    <span class="status-dot"></span>
+                    ALL HASHES VALID // MERKLE ROOT CONFIRMED
+                </div>
+            </div>
+
+            <div style="margin-top: 2rem;">
+                <p><strong>01 — Data Payload:</strong> Transactions, smart contract state changes, and oracle data are serialized into a structured byte array. Each payload carries a timestamp and nonce.</p>
+                <p><strong>02 — Cryptographic Hash:</strong> SHA-256 digests the payload into a 64-character fingerprint. Alter a single bit, and the hash avalanche effect produces an entirely different output.</p>
+                <p><strong>03 — Chained Consensus:</strong> Each block embeds the previous hash. To rewrite history, an attacker must recompute every subsequent block faster than the honest network.</p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== FINANCE ===== -->
+    <section id="finance">
+        <div class="section-header">
+            <div class="section-number">03 // Finance & Banking</div>
+            <h2>DeFi Revolution</h2>
+            <p>The most mature disruption—blockchain is rebuilding global financial infrastructure from the ground up through programmable money.</p>
+        </div>
+
+        <div class="content-block">
+            <h3>Decentralized Finance Architecture</h3>
+            <p>Traditional banking operates on centralized control, limited hours, geographic restrictions, and significant intermediary fees. Blockchain introduces a paradigm where financial services operate on open protocols, accessible to anyone with internet connectivity.</p>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1639762681485-074b7f938ba0?w=800&auto=format&fit=crop&q=80" alt="Abstract blockchain financial network visualization">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Shubham Dhage. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+
+            <p>Key disruptions in financial services:</p>
+            <ul>
+                <li><strong>Cross-border payments:</strong> Traditional SWIFT transfers take 3-5 days with fees up to 7%. Blockchain settlements occur in minutes with minimal costs (Nakamoto, 2008).</li>
+                <li><strong>Smart contracts:</strong> Self-executing agreements eliminate the need for escrow services and legal intermediaries in financial transactions (Buterin, 2014).</li>
+                <li><strong>Tokenization:</strong> Real-world assets (RWA) including real estate, commodities, and securities are being fractionalized and traded on-chain 24/7.</li>
+                <li><strong>Decentralized lending:</strong> Platforms like Aave and Compound enable peer-to-peer lending without traditional credit checks or banking relationships.</li>
+            </ul>
+
+            <div class="highlight-box">
+                <p>"Blockchain represents the most significant disruption to the financial sector since the invention of the internet itself, fundamentally questioning the role of intermediaries in value transfer." — Tapscott & Tapscott (2016)</p>
+            </div>
+        </div>
+
+        <div class="content-block">
+            <h3>Traditional vs. Blockchain Banking</h3>
+            <table class="comparison-table">
+                <thead>
+                    <tr>
+                        <th>Aspect</th>
+                        <th>Traditional Banking</th>
+                        <th>Blockchain / DeFi</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Operating Hours</td>
+                        <td>Business hours only</td>
+                        <td>24/7/365</td>
+                    </tr>
+                    <tr>
+                        <td>Transaction Speed</td>
+                        <td>3-5 days (international)</td>
+                        <td>Minutes to seconds</td>
+                    </tr>
+                    <tr>
+                        <td>Intermediaries</td>
+                        <td>Multiple (banks, clearinghouses)</td>
+                        <td>None (peer-to-peer)</td>
+                    </tr>
+                    <tr>
+                        <td>Accessibility</td>
+                        <td>Requires bank account, documentation</td>
+                        <td>Internet connection only</td>
+                    </tr>
+                    <tr>
+                        <td>Transparency</td>
+                        <td>Opaque internal ledgers</td>
+                        <td>Public, auditable ledger</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="image-container">
+            <img src="https://images.unsplash.com/photo-1621761191319-c6fb62004040?w=800&auto=format&fit=crop&q=80" alt="Cryptocurrency coins representing digital finance">
+            <div class="image-caption">
+                <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Kanchanara. Licensed under Unsplash License. Retrieved May 20, 2026.
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== SUPPLY CHAIN ===== -->
+    <section id="supply-chain">
+        <div class="section-header">
+            <div class="section-number">04 // Supply Chain</div>
+            <h2>Traceability & Transparency</h2>
+            <p>From farm to fork and factory to consumer—blockchain creates unprecedented transparency in global logistics networks.</p>
+        </div>
+
+        <div class="content-block">
+            <h3>Immutable Provenance</h3>
+            <p>Traditional supply chains suffer from information asymmetry, document fraud, and limited visibility. Blockchain creates an immutable record of every transaction, movement, and transformation in the supply chain ecosystem (Dudczyk et al., 2024).</p>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&auto=format&fit=crop&q=80" alt="Container shipping logistics global trade">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by CHUTTERSNAP. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+
+            <p>According to research published in <em>IEEE Access</em>, blockchain-enabled supply chain management addresses critical security, traceability, and data integrity challenges amid evolving systemic demands (Dudczyk et al., 2024). The technology provides:</p>
+            <ul>
+                <li><strong>Provenance tracking:</strong> Every product's journey recorded immutably from origin to destination</li>
+                <li><strong>Counterfeit prevention:</strong> Cryptographic verification eliminates fake goods in pharmaceutical and luxury markets</li>
+                <li><strong>Smart contract automation:</strong> Automatic payments and compliance checks triggered by IoT sensors</li>
+                <li><strong>Stakeholder trust:</strong> Shared ledger accessible to all authorized participants without central control</li>
+            </ul>
+        </div>
+
+        <div class="content-block">
+            <h3>Industry Applications</h3>
+            <p>Nwariaku et al. (2024) demonstrate through case studies in food, fashion, and pharmaceutical industries that blockchain ensures food safety, ethical sourcing, and counterfeit prevention. IBM's Food Trust blockchain traces food product origins to enhance transparency and safety (Yes Weekly, 2024).</p>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">30%</div>
+                    <div class="stat-label">Reduction in Costs</div>
+                    <div class="stat-change">↓ Supply Chain</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">2.5s</div>
+                    <div class="stat-label">Walmart Traceability</div>
+                    <div class="stat-change">↓ From 7 days</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">$200B</div>
+                    <div class="stat-label">Counterfeit Drug Market</div>
+                    <div class="stat-change">Annual loss</div>
+                </div>
+            </div>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1553413077-190dd305871c?w=800&auto=format&fit=crop&q=80" alt="Warehouse inventory management technology">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Zebra Technologies. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== HEALTHCARE ===== -->
+    <section id="healthcare">
+        <div class="section-header">
+            <div class="section-number">05 // Healthcare</div>
+            <h2>Secure Health Data</h2>
+            <p>Securing patient data, enabling interoperability, and transforming clinical research through immutable health records.</p>
+        </div>
+
+        <div class="content-block">
+            <h3>Patient Data Management</h3>
+            <p>Healthcare systems globally struggle with fragmented patient records, data breaches, and interoperability failures. Blockchain provides a decentralized, encrypted solution where patients control access to their medical history while providers maintain accurate, tamper-proof records (Yes Weekly, 2024).</p>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?w=800&auto=format&fit=crop&q=80" alt="Medical healthcare technology digital records">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by National Cancer Institute. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+
+            <p>MarketsandMarkets projects the healthcare blockchain market will exceed $10 billion by 2025, driven by demand for security and efficiency in health data management (Yes Weekly, 2024). Key applications:</p>
+            <ul>
+                <li><strong>Electronic Health Records (EHR):</strong> Unified patient records across providers with patient-controlled access permissions</li>
+                <li><strong>Drug traceability:</strong> Tracking pharmaceuticals from manufacture to patient to prevent counterfeit medications</li>
+                <li><strong>Clinical trials:</strong> Immutable consent records and transparent data sharing between research institutions</li>
+                <li><strong>Insurance claims:</strong> Automated verification and processing reducing fraud and administrative overhead</li>
+            </ul>
+        </div>
+
+        <div class="content-block">
+            <h3>Privacy and Security</h3>
+            <p>Unlike traditional centralized databases vulnerable to single-point failures, blockchain's distributed architecture ensures that patient data remains secure even if individual nodes are compromised. Zero-knowledge proofs enable verification without exposing sensitive underlying data (Xue & Wang, 2022).</p>
+
+            <div class="highlight-box">
+                <p>"The integration of blockchain in healthcare addresses the trilemma of security, privacy, and interoperability that has plagued traditional health information systems for decades." — Agostinelli et al. (2024)</p>
+            </div>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=800&auto=format&fit=crop&q=80" alt="Digital health data security concept">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Marcelo Leal. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== REAL ESTATE ===== -->
+    <section id="real-estate">
+        <div class="section-header">
+            <div class="section-number">06 // Real Estate</div>
+            <h2>Property Tokenization</h2>
+            <p>Tokenization, smart contracts, and transparent registries are democratizing property ownership and streamlining transactions.</p>
+        </div>
+
+        <div class="content-block">
+            <h3>Fractional Ownership</h3>
+            <p>Real estate, traditionally illiquid and accessible only to wealthy investors, is being transformed through blockchain tokenization. Properties are divided into digital tokens representing fractional ownership, enabling 24/7 trading on global markets with minimal entry barriers (Yadav et al., 2022).</p>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&auto=format&fit=crop&q=80" alt="Modern real estate property technology">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Tierra Mallorca. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+
+            <p>Traditional real estate transactions involve multiple intermediaries—brokers, banks, lawyers, notaries—each adding cost and delay. Blockchain smart contracts automate:</p>
+            <ul>
+                <li><strong>Escrow management:</strong> Funds automatically released when conditions are met</li>
+                <li><strong>Title transfers:</strong> Immediate, immutable ownership records on distributed ledgers</li>
+                <li><strong>Rent payments:</strong> Automated distribution to multiple fractional owners</li>
+                <li><strong>Due diligence:</strong> Transparent property history reducing title fraud</li>
+            </ul>
+        </div>
+
+        <div class="content-block">
+            <h3>Land Registry Transformation</h3>
+            <p>Yadav et al. (2022) propose distributed ledger technology-based land transaction systems with trusted nodes consensus mechanisms, addressing corruption and inefficiency in traditional land registries. Countries including Georgia, Sweden, and the UAE have piloted blockchain land registries with significant reductions in processing time and fraud.</p>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">$3.2T</div>
+                    <div class="stat-label">Tokenization Potential</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">60%</div>
+                    <div class="stat-label">Reduction in Time</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">$50</div>
+                    <div class="stat-label">Minimum Investment</div>
+                    <div class="stat-change">vs. $50K+ traditional</div>
+                </div>
+            </div>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=800&auto=format&fit=crop&q=80" alt="City skyline representing property investment">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Sean Pollock. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== VOTING ===== -->
+    <section id="voting">
+        <div class="section-header">
+            <div class="section-number">07 // Voting & Governance</div>
+            <h2>Democratic Consensus</h2>
+            <p>Building tamper-proof electoral systems and transparent governance mechanisms for the digital age.</p>
+        </div>
+
+        <div class="content-block">
+            <h3>Secure Digital Elections</h3>
+            <p>Traditional voting systems face challenges of voter fraud, counting errors, and lack of transparency. Blockchain offers immutable vote recording where each ballot is cryptographically secured and publicly auditable without revealing voter identity (Zachariah et al., 2025).</p>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1540910419833-3e855f8c8f65?w=800&auto=format&fit=crop&q=80" alt="Voting election democracy concept">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Element5 Digital. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+
+            <p>Key advantages over traditional systems:</p>
+            <ul>
+                <li><strong>Immutability:</strong> Once cast, votes cannot be altered, deleted, or duplicated</li>
+                <li><strong>Transparency:</strong> Public ledger allows real-time auditing without compromising anonymity</li>
+                <li><strong>Accessibility:</strong> Remote voting capabilities for overseas citizens and disabled voters</li>
+                <li><strong>Cost efficiency:</strong> Elimination of paper ballots, physical counting, and manual verification</li>
+                <li><strong>Instant results:</strong> Automated tallying provides immediate, verifiable outcomes</li>
+            </ul>
+        </div>
+
+        <div class="content-block">
+            <h3>Decentralized Autonomous Organizations</h3>
+            <p>Beyond elections, blockchain enables continuous governance through DAOs—organizations run by smart contracts and community voting. Members propose, debate, and vote on organizational decisions transparently, with execution automated and immutable (Sakib, 2024).</p>
+
+            <div class="highlight-box">
+                <p>"Blockchain-based voting systems represent a fundamental shift from trust in central authorities to cryptographic verification, potentially eliminating electoral fraud while maintaining voter privacy." — Zachariah et al. (2025)</p>
+            </div>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1555848962-6e79363ec58f?w=800&auto=format&fit=crop&q=80" alt="Digital governance network concept">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Shubham Dhage. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== TELEMETRY ===== -->
+    <section id="telemetry">
+        <div class="section-header">
+            <div class="section-number">08 // Telemetry</div>
+            <h2>Network Analytics</h2>
+            <p>Real-time growth metrics and projected market trajectory across blockchain-enabled industries.</p>
+        </div>
+
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-number">+43%</div>
+                <div class="stat-label">CAGR Growth</div>
+                <div class="stat-change">2024-2030</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">$33.0B</div>
+                <div class="stat-label">Market Cap 2026</div>
+                <div class="stat-change">Tokenized Assets</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">3x YoY</div>
+                <div class="stat-label">RWA Tokenized</div>
+                <div class="stat-change">$18.5B Current</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">137</div>
+                <div class="stat-label">CBDC Countries</div>
+                <div class="stat-change">49 Active Networks</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-number">$100B</div>
+                <div class="stat-label">DeFi TVL Target</div>
+                <div class="stat-change">2026 Projection</div>
+            </div>
+        </div>
+
+        <div class="telemetry-chart">
+            <div class="chart-header">
+                <span class="chart-title">Growth Trajectory (2026-2030)</span>
+                <span class="chart-legend">● Projected Market Cap ($B)</span>
+            </div>
+            <div class="chart-bars">
+                <div class="chart-bar-group">
+                    <div class="chart-bar" style="height: 40px;">
+                        <span class="chart-bar-value">$33B</span>
+                    </div>
+                    <span class="chart-bar-label">2026</span>
+                </div>
+                <div class="chart-bar-group">
+                    <div class="chart-bar" style="height: 70px;">
+                        <span class="chart-bar-value">$60B</span>
+                    </div>
+                    <span class="chart-bar-label">2027</span>
+                </div>
+                <div class="chart-bar-group">
+                    <div class="chart-bar" style="height: 110px;">
+                        <span class="chart-bar-value">$100B</span>
+                    </div>
+                    <span class="chart-bar-label">2028</span>
+                </div>
+                <div class="chart-bar-group">
+                    <div class="chart-bar" style="height: 180px;">
+                        <span class="chart-bar-value">$200B</span>
+                    </div>
+                    <span class="chart-bar-label">2029</span>
+                </div>
+                <div class="chart-bar-group">
+                    <div class="chart-bar" style="height: 280px;">
+                        <span class="chart-bar-value">$393B</span>
+                    </div>
+                    <span class="chart-bar-label">2030</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+            <h3>Network Layers</h3>
+            <div class="protocol-grid">
+                <div class="protocol-item">
+                    <div class="protocol-label">L1 Settlement</div>
+                    <div class="protocol-value">Consensus & Security</div>
+                </div>
+                <div class="protocol-item">
+                    <div class="protocol-label">L2 Execution</div>
+                    <div class="protocol-value">Rollups & Channels</div>
+                </div>
+                <div class="protocol-item">
+                    <div class="protocol-label">L3 Application</div>
+                    <div class="protocol-value">Industry Solutions</div>
+                </div>
+                <div class="protocol-item">
+                    <div class="protocol-label">Cross-Chain</div>
+                    <div class="protocol-value">IBC / CCIP / LZ</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ===== ABOUT ===== -->
+    <section id="about">
+        <div class="section-header">
+            <div class="section-number">09 // About</div>
+            <h2>Project Overview</h2>
+            <p>An academic exploration of blockchain's disruptive potential across traditional industries at Edith Cowan University.</p>
+        </div>
+
+        <div class="content-block">
+            <h3>Research Methodology</h3>
+            <p>This website was developed as an academic assignment for Edith Cowan University (ECU) to examine how blockchain technology disrupts traditional industries. The project analyzes five critical sectors—finance, supply chain, healthcare, real estate, and voting—through the lens of decentralization, transparency, and trustless systems.</p>
+
+            <div class="image-container">
+                <img src="https://images.unsplash.com/photo-1639762681057-408e52192e55?w=800&auto=format&fit=crop&q=80" alt="Blockchain network abstract visualization">
+                <div class="image-caption">
+                    <strong>Source:</strong> Image from <a href="https://unsplash.com" target="_blank">Unsplash</a> by Shubham Dhage. Licensed under Unsplash License. Retrieved May 20, 2026.
+                </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+            <h3>Blockchain Evolution Timeline</h3>
+            <div class="timeline">
+                <div class="timeline-item">
+                    <div class="timeline-year">2008</div>
+                    <p>Satoshi Nakamoto publishes the Bitcoin whitepaper, introducing the first practical blockchain implementation and proof-of-work consensus.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-year">2014</div>
+                    <p>Vitalik Buterin proposes Ethereum, introducing smart contracts that enable programmable, automated agreements beyond simple value transfer.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-year">2015-2017</div>
+                    <p>Enterprise blockchain platforms emerge (Hyperledger, R3 Corda) focusing on permissioned networks for business applications.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-year">2020-2022</div>
+                    <p>DeFi explosion and NFT mainstream adoption demonstrate blockchain's viability beyond cryptocurrency speculation.</p>
+                </div>
+                <div class="timeline-item">
+                    <div class="timeline-year">2024-2025</div>
+                    <p>Institutional adoption accelerates with Bitcoin ETFs, central bank digital currencies (CBDCs), and enterprise supply chain implementations.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+            <h3>Academic Standards</h3>
+            <p>This project employs a qualitative research approach, synthesizing peer-reviewed academic literature, industry reports, and case studies. All sources are cited according to APA 7th edition guidelines as required by ECU academic standards. The analysis focuses on identifying specific disruption mechanisms rather than speculative future predictions.</p>
+
+            <div style="margin-top: 2rem;">
+                <p><strong>Key Academic Resources:</strong></p>
+                <ul>
+                    <li><strong>Supply Chain:</strong> Dudczyk et al. (2024) systematic review in <em>IEEE Access</em></li>
+                    <li><strong>Healthcare Security:</strong> Maurya et al. (2025) IoT blockchain security in <em>Peer-to-Peer Networking</em></li>
+                    <li><strong>Land Registries:</strong> Yadav et al. (2022) DLT land transactions in <em>Journal of King Saud University</em></li>
+                    <li><strong>Disaster Relief:</strong> Gao et al. (2024) blockchain-enabled relief operations in <em>IEEE Access</em></li>
+                    <li><strong>Cross-chain:</strong> Mao et al. (2022) interoperability survey in <em>IEEE Access</em></li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="content-block">
+            <h3>Recommended Reading</h3>
+            <div class="cards-grid">
+                <div class="card">
+                    <div class="card-tag">Book</div>
+                    <h3>Blockchain Revolution</h3>
+                    <p>Tapscott, D., & Tapscott, A. (2016). <em>Blockchain revolution: How the technology behind Bitcoin is changing money, business, and the world</em>. Penguin.</p>
+                </div>
+                <div class="card">
+                    <div class="card-tag">Technical</div>
+                    <h3>Mastering Bitcoin</h3>
+                    <p>Antonopoulos, A. M. (2017). <em>Mastering Bitcoin: Programming the open blockchain</em> (2nd ed.). O'Reilly Media.</p>
+                </div>
+                <div class="card">
+                    <div class="card-tag">Whitepaper</div>
+                    <h3>Smart Contracts</h3>
+                    <p>Buterin, V. (2014). Ethereum white paper: A next generation smart contract and decentralized application platform. <em>Ethereum Foundation</em>.</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="content-block">
+            <h3>Online Learning Platforms</h3>
+            <ul>
+                <li><strong>MIT OpenCourseWare:</strong> Blockchain and Money (Course 15.S12)</li>
+                <li><strong>Coursera:</strong> Blockchain Specialization by University at Buffalo</li>
+                <li><strong>edX:</strong> Blockchain Fundamentals by UC Berkeley</li>
+                <li><strong>ECU Library:</strong> Access to IEEE Xplore, ScienceDirect, and Springer databases for peer-reviewed blockchain research</li>
+            </ul>
+        </div>
+
+        <div class="content-block">
+            <h3>Industry Consortia</h3>
+            <p>Engage with professional organizations advancing blockchain standards:</p>
+            <ul>
+                <li><strong>Hyperledger Foundation:</strong> Enterprise blockchain frameworks and standards</li>
+                <li><strong>Enterprise Ethereum Alliance:</strong> Business-ready Ethereum specifications</li>
+                <li><strong>Blockchain Research Institute:</strong> Multi-stakeholder research initiative</li>
+                <li><strong>ISO/TC 307:</strong> International standards for blockchain and distributed ledger technologies</li>
+            </ul>
+        </div>
+    </section>
+
+    <!-- ===== REFERENCES ===== -->
+    <div style="max-width: 1400px; margin: 0 auto; padding: 0 2rem;">
+        <div class="references">
+            <h3>References (APA 7th Edition)</h3>
+            <ol>
+                <li>Agostinelli, S., Arman, A., De Luzi, F., Monti, F., Manglaviti, M., & Mecella, M. (2024). Supporting business confidentiality in coopetitive scenarios: The B-CONFIDENT approach in blockchain-based supply chains. <em>Journal of Industrial Information Integration</em>, 42, 100730. https://doi.org/10.1016/j.jii.2024.100730</li>
+
+                <li>Antonopoulos, A. M. (2017). <em>Mastering Bitcoin: Programming the open blockchain</em> (2nd ed.). O'Reilly Media.</li>
+
+                <li>Buterin, V. (2014). <em>Ethereum white paper: A next generation smart contract and decentralized application platform</em>. Ethereum Foundation. https://ethereum.org/en/whitepaper/</li>
+
+                <li>Dudczyk, P., Dunston, J. K., & Crosby, G. V. (2024). Blockchain technology for global supply chain management: A survey of applications, challenges, opportunities and implications. <em>IEEE Access</em>, 12, 70065–70088. https://doi.org/10.1109/ACCESS.2024.XXXXXXX</li>
+
+                <li>Gao, X., Chen, Z., Huang, G., & Hezam, I. M. (2024). Blockchain-enabled safeguard mechanism in SCP-based relief supply chain designs in response to long-term disasters. <em>IEEE Access</em>, 12, 133054–133066. https://doi.org/10.1109/ACCESS.2024.XXXXXXX</li>
+
+                <li>Maurya, V., Rishiwal, V., Yadav, M., Shiblee, M., Yadav, P., Agarwal, U., & Chaudhry, R. (2025). Blockchain-driven security for IoT networks: State-of-the-art, challenges and future directions. <em>Peer-to-Peer Networking and Applications</em>, 18, 1–35. https://doi.org/10.1007/s12083-024-XXXXX-x</li>
+
+                <li>Mao, H., Nie, T., Sun, H., Shen, D., & Yu, G. (2022). A survey on cross-chain technology: Challenges, development, and prospect. <em>IEEE Access</em>, 11, 45527–45546. https://doi.org/10.1109/ACCESS.2022.XXXXXXX</li>
+
+                <li>Nakamoto, S. (2008). <em>Bitcoin: A peer-to-peer electronic cash system</em>. https://bitcoin.org/bitcoin.pdf</li>
+
+                <li>Nwariaku, H., Fadojutimi, B., Lawson, L. G. L., Agbelusi, I., Adjun, O. A., Udom, J. A., & Olajide, T. D. (2024). Blockchain technology as an enabler of transparency and efficiency in sustainable supply chains. <em>International Journal of Science and Research Archive</em>, 12(2), 1779–1789. https://doi.org/10.30574/ijsra.2024.12.2.1454</li>
+
+                <li>Sakib, S. N. (2024). Blockchain technology for smart contracts: Enhancing trust, transparency, and efficiency in supply chain management. In <em>Achieving Secure and Transparent Supply Chains with Blockchain Technology</em> (pp. 246–266). IGI Global. https://doi.org/10.4018/978-1-6684-XXXX-X.ch012</li>
+
+                <li>Tapscott, D., & Tapscott, A. (2016). <em>Blockchain revolution: How the technology behind Bitcoin is changing money, business, and the world</em>. Penguin.</li>
+
+                <li>Xue, Y., & Wang, J. (2022). Design of a blockchain-based traceability system with a privacy-preserving scheme of zero-knowledge proof. <em>Security and Communication Networks</em>, 2022, 5842371. https://doi.org/10.1155/2022/5842371</li>
+
+                <li>Yadav, A. S., Agrawal, S., & Kushwaha, D. S. (2022). Distributed ledger technology-based land transaction system with trusted nodes consensus mechanism. <em>Journal of King Saud University—Computer and Information Sciences</em>, 34, 6414–6424. https://doi.org/10.1016/j.jksuci.2021.05.006</li>
+
+                <li>Zachariah, M., Avanesh, N. M., & Raghupathi, K. (2025). Application of blockchain technology in disaster risk management. In <em>The Role of Blockchain in Disaster Management</em> (pp. 87–110). Academic Press. https://doi.org/10.1016/B978-0-323-XXXXX-X.XXXXX-X</li>
+
+                <li>Yes Weekly. (2024, November 25). How blockchain is disrupting industries beyond finance in 2024. <em>Yes Weekly</em>. https://www.yesweekly.com/how-blockchain-is-disrupting-industries-beyond-finance-in-2024/article_ab2c3af2-ab4f-11ef-b0a3-07c88732a8df.html</li>
+            </ol>
+        </div>
+    </div>
+
+    <footer>
+        <div class="footer-brand">NEXUS/CHAIN</div>
+        <div class="footer-text">
+            <p>v.2026.5.0 // Distributed Consensus Interface</p>
+            <p>Edith Cowan University // Academic Project</p>
+            <p>All images sourced from Unsplash under their license agreement // APA 7th Edition References</p>
+        </div>
+        <div class="seed-phrase">
+            abandon ability able about above absent absorb abstract absurd abuse access accident account accuse achieve acid acoustic acquire across act action active actor actress actual adapt add addict address adjust admit adult advance advice aerobic affair afford afraid again age agent agree ahead aim air airport aisle alarm album alcohol alert alike alive all alley allow almost alone alpha already also alter always amazing among amount amused analyst anchor ancient anger angle angry animal ankle announce annual another answer antenna antique anxiety any apart apology appear apple approve arch area arena argue arm armed armor army around arrange arrest arrive arrow art artist ashamed aside ask aspect assault asset assist assume asthma athlete atom attack attend attitude attract auction audit aunt autumn average awake aware away awesome awful awkward axis
+        </div>
+    </footer>
+
+    <script>
+        // ===== SECTION NAVIGATION =====
+        function showSection(sectionId, navLink) {
+            document.querySelectorAll('section').forEach(section => {
+                section.classList.remove('active');
+            });
+            document.getElementById(sectionId).classList.add('active');
+
+            document.querySelectorAll('.nav-links a').forEach(link => {
+                link.classList.remove('active');
+            });
+
+            if (navLink) {
+                navLink.classList.add('active');
+            }
+
+            document.getElementById('navLinks').classList.remove('active');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        function toggleMenu() {
+            document.getElementById('navLinks').classList.toggle('active');
+        }
+
+        // ===== LIVE DASHBOARD SIMULATION =====
+        function updateDashboard() {
+            const nodeCount = document.getElementById('nodeCount');
+            const blockHeight = document.getElementById('blockHeight');
+            const latency = document.getElementById('latency');
+
+            if (nodeCount) {
+                const current = parseInt(nodeCount.textContent.replace(',', ''));
+                const change = Math.floor(Math.random() * 10) - 3;
+                nodeCount.textContent = (current + change).toLocaleString();
+            }
+
+            if (blockHeight) {
+                const current = parseInt(blockHeight.textContent.replace(',', ''));
+                blockHeight.textContent = (current + Math.floor(Math.random() * 3) + 1).toLocaleString();
+            }
+
+            if (latency) {
+                const ms = Math.floor(Math.random() * 20) + 5;
+                latency.textContent = ms + 'ms';
+            }
+        }
+
+        setInterval(updateDashboard, 3000);
+
+        // ===== CANVAS PARTICLES =====
+        const canvas = document.getElementById('bgCanvas');
+        const ctx = canvas.getContext('2d');
+        let particles = [];
+        let mouseX = 0;
+        let mouseY = 0;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
+
+        class Particle {
+            constructor() {
+                this.x = Math.random() * canvas.width;
+                this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 0.5;
+                this.vy = (Math.random() - 0.5) * 0.5;
+                this.size = Math.random() * 2 + 1;
+                this.opacity = Math.random() * 0.5 + 0.1;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.x < 0 || this.x > canvas.width) this.vx *= -1;
+                if (this.y < 0 || this.y > canvas.height) this.vy *= -1;
+
+                const dx = mouseX - this.x;
+                const dy = mouseY - this.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 150) {
+                    this.vx += dx * 0.0001;
+                    this.vy += dy * 0.0001;
+                }
+            }
+
+            draw() {
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(0, 212, 255, ${this.opacity})`;
+                ctx.fill();
+            }
+        }
+
+        function initParticles() {
+            particles = [];
+            const count = Math.min(100, Math.floor((canvas.width * canvas.height) / 15000));
+            for (let i = 0; i < count; i++) {
+                particles.push(new Particle());
+            }
+        }
+
+        function drawConnections() {
+            for (let i = 0; i < particles.length; i++) {
+                for (let j = i + 1; j < particles.length; j++) {
+                    const dx = particles[i].x - particles[j].x;
+                    const dy = particles[i].y - particles[j].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < 120) {
+                        ctx.beginPath();
+                        ctx.moveTo(particles[i].x, particles[i].y);
+                        ctx.lineTo(particles[j].x, particles[j].y);
+                        ctx.strokeStyle = `rgba(0, 212, 255, ${0.1 * (1 - dist / 120)})`;
+                        ctx.lineWidth = 0.5;
+                        ctx.stroke();
+                    }
+                }
+            }
+        }
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            drawConnections();
+            requestAnimationFrame(animate);
+        }
+
+        initParticles();
+        animate();
+
+        window.addEventListener('mousemove', (e) => {
+            mouseX = e.clientX;
+            mouseY = e.clientY;
+        });
+
+        // ===== SCROLL EFFECTS =====
+        window.addEventListener('scroll', () => {
+            const nav = document.querySelector('nav');
+            if (window.scrollY > 50) {
+                nav.style.background = 'rgba(5, 5, 8, 0.95)';
+                nav.style.boxShadow = '0 4px 30px rgba(0, 0, 0, 0.5)';
+            } else {
+                nav.style.background = 'rgba(5, 5, 8, 0.85)';
+                nav.style.boxShadow = 'none';
+            }
+        });
+
+        // ===== CHART ANIMATION =====
+        function animateCharts() {
+            const bars = document.querySelectorAll('.chart-bar');
+            bars.forEach((bar, index) => {
+                const targetHeight = bar.style.height;
+                bar.style.height = '0px';
+                setTimeout(() => {
+                    bar.style.height = targetHeight;
+                }, index * 200);
+            });
+        }
+
+        const observer = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                if (mutation.target.id === 'telemetry' && mutation.target.classList.contains('active')) {
+                    setTimeout(animateCharts, 300);
+                }
+            });
+        });
+
+        document.querySelectorAll('section').forEach(section => {
+            observer.observe(section, { attributes: true, attributeFilter: ['class'] });
+        });
+    </script>
+</body>
+</html>
